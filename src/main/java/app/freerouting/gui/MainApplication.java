@@ -93,7 +93,10 @@ public class MainApplication extends WindowBase {
    */
   public MainApplication(StartupOptions startupOptions) {
     super(600, 300);
-
+    Dimension dimension = Toolkit.getDefaultToolkit().getScreenSize();
+    int x = (int) ((dimension.getWidth() - this.getWidth()) / 2);
+    int y = (int) ((dimension.getHeight() - this.getHeight()) / 2);
+    this.setLocation(x-12, y-12);
     this.design_dir_name = startupOptions.getDesignDir();
     this.max_passes = startupOptions.getMaxPasses();
     this.num_threads = startupOptions.getNumThreads();
