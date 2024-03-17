@@ -116,7 +116,7 @@ public class DesignFile {
       File rules_file = new File(p_parent_name, rules_file_name);
       FRLogger.info("Opening '" + rules_file_name + "'...");
       InputStream input_stream = new FileInputStream(rules_file);
-      if (dsn_file_generated_by_host && WindowMessage.confirm(p_confirm_message)) {
+      if (dsn_file_generated_by_host) {
         return RulesFile.read(input_stream, p_design_name, p_board_handling);
       }
     } catch (IOException e) {
