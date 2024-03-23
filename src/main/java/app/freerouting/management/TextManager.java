@@ -1,5 +1,6 @@
-package app.freerouting.gui;
+package app.freerouting.management;
 
+import app.freerouting.settings.GlobalSettings;
 import app.freerouting.logger.FRLogger;
 import java.awt.Font;
 import java.awt.FontFormatException;
@@ -11,7 +12,6 @@ import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.swing.AbstractButton;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -26,7 +26,9 @@ public class TextManager {
   // A key-value pair for icon names and their corresponding unicode characters
   private Map<String, Integer> iconMap = new HashMap<>()
   {{
+    put("cog", 0xF0493);
     put("auto-fix", 0xF0068);
+    put("delete-sweep", 0xF05E9);
     put("undo", 0xF054C);
     put("redo", 0xF044E);
     put("spider-web", 0xF0BCA);

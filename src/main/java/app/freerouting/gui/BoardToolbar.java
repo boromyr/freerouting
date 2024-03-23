@@ -1,5 +1,6 @@
 package app.freerouting.gui;
 
+import app.freerouting.board.RoutingBoard;
 import app.freerouting.board.Unit;
 import app.freerouting.interactive.DragMenuState;
 import app.freerouting.interactive.InteractiveActionThread;
@@ -8,7 +9,7 @@ import app.freerouting.interactive.RouteMenuState;
 import app.freerouting.interactive.SelectMenuState;
 
 import app.freerouting.management.FRAnalytics;
-import java.awt.Color;
+import app.freerouting.management.TextManager;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
@@ -17,23 +18,17 @@ import javax.swing.ButtonGroup;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JFormattedTextField;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.text.NumberFormat;
-import java.util.ResourceBundle;
 import javax.swing.border.BevelBorder;
 
 /** Implements the toolbar panel of the board frame. */
 class BoardToolbar extends JPanel {
-  private final float FONT_SIZE = 22;
+  private final float ICON_FONT_SIZE = 22;
   final JComboBox<Unit> toolbar_unit_combo_box;
   private final BoardFrame board_frame;
   private final JToggleButton toolbar_select_button;
@@ -76,14 +71,12 @@ class BoardToolbar extends JPanel {
     tm.setText(toolbar_route_button, "route_button");
     toolbar_route_button.addActionListener(evt -> board_frame.board_panel.board_handling.set_route_menu_state());
     toolbar_route_button.addActionListener(evt -> FRAnalytics.buttonClicked("toolbar_route_button", toolbar_route_button.getText()));
-
     left_toolbar.add(toolbar_route_button);
 
     toolbar_button_group.add(toolbar_drag_button);
     tm.setText(toolbar_drag_button, "drag_button");
     toolbar_drag_button.addActionListener(evt -> board_frame.board_panel.board_handling.set_drag_menu_state());
     toolbar_drag_button.addActionListener(evt -> FRAnalytics.buttonClicked("toolbar_drag_button", toolbar_drag_button.getText()));
-
     left_toolbar.add(toolbar_drag_button);
 
     jLabel1.setMaximumSize(new Dimension(30, 10));
@@ -97,6 +90,17 @@ class BoardToolbar extends JPanel {
 
     final JToolBar middle_toolbar = new JToolBar();
 
+    // Add "Settings" button to the toolbar
+    final JButton settings_button = new JButton();
+    tm.setText(settings_button, "settings_button");
+    settings_button.addActionListener(
+        evt -> {
+          board_frame.autoroute_parameter_window.setVisible(true);
+        });
+    settings_button.addActionListener(evt -> FRAnalytics.buttonClicked("settings_button", settings_button.getText()));
+    middle_toolbar.add(settings_button);
+
+    // Add "Autoroute" button to the toolbar
     final JButton toolbar_autoroute_button = new JButton();
     tm.setText(toolbar_autoroute_button, "autoroute_button");
     toolbar_autoroute_button.setDefaultCapable(true);
@@ -112,7 +116,7 @@ class BoardToolbar extends JPanel {
     toolbar_autoroute_button.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
     toolbar_autoroute_button.addActionListener(
         evt -> {
-          InteractiveActionThread thread = board_frame.board_panel.board_handling.start_batch_autorouter();
+          InteractiveActionThread thread = board_frame.board_panel.board_handling.start_autorouter_and_route_optimizer();
 
           if (board_frame.board_panel.board_handling.autorouter_listener != null) {
             // Add the auto-router listener to save the design file when the auto-router is running
@@ -120,8 +124,30 @@ class BoardToolbar extends JPanel {
           }
         });
     toolbar_autoroute_button.addActionListener(evt -> FRAnalytics.buttonClicked("toolbar_autoroute_button", toolbar_autoroute_button.getText()));
-
     middle_toolbar.add(toolbar_autoroute_button);
+
+    // Add "Delete All Tracks and Vias" button to the toolbar
+    final JButton delete_all_tracks_button = new JButton();
+    tm.setText(delete_all_tracks_button, "delete_all_tracks_button");
+    delete_all_tracks_button.addActionListener(
+        evt -> {
+          RoutingBoard board = board_frame.board_panel.board_handling.get_routing_board();
+          // delete all tracks and vias
+          board.delete_all_tracks_and_vias();
+          // update the board
+          board_frame.board_panel.board_handling.update_routing_board(board);
+          // create a deep copy of the routing board
+          board = board_frame.board_panel.board_handling.deep_copy_routing_board();
+          // update the board again
+          board_frame.board_panel.board_handling.update_routing_board(board);
+          // create ratsnest
+          board_frame.board_panel.board_handling.create_ratsnest();
+          // redraw the board
+          board_frame.board_panel.board_handling.repaint();
+        });
+    delete_all_tracks_button.addActionListener(evt -> FRAnalytics.buttonClicked("delete_all_tracks_button", delete_all_tracks_button.getText()));
+    middle_toolbar.add(delete_all_tracks_button);
+
 
     final JLabel separator_2 = new JLabel();
     separator_2.setMaximumSize(new Dimension(10, 10));
@@ -219,7 +245,7 @@ class BoardToolbar extends JPanel {
 
     this.add(right_toolbar, BorderLayout.EAST);
 
-    changeToolbarFontSize(middle_toolbar, FONT_SIZE);
+    changeToolbarFontSize(middle_toolbar, ICON_FONT_SIZE);
   }
 
   /** Sets the selected button in the menu button group */

@@ -11,8 +11,10 @@ import app.freerouting.datastructures.TimeLimit;
 import app.freerouting.datastructures.UndoableObjects;
 import app.freerouting.geometry.planar.FloatLine;
 import app.freerouting.geometry.planar.FloatPoint;
+import app.freerouting.management.TextManager;
 import app.freerouting.interactive.BoardHandling;
 import app.freerouting.interactive.InteractiveActionThread;
+import app.freerouting.interactive.InteractiveState;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.Net;
 
@@ -21,12 +23,11 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.OptionalDouble;
-import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
-/** Handles the sequencing of the batch autoroute passes. */
+/** Handles the sequencing of the auto-router passes. */
 public class BatchAutorouter {
   private static final int TIME_LIMIT_TO_PREVENT_ENDLESS_LOOP = 1000;
   private final InteractiveActionThread thread;
@@ -37,7 +38,7 @@ public class BatchAutorouter {
   private final boolean retain_autoroute_database;
   private final int start_ripup_costs;
   private final HashSet<String> already_checked_board_hashes = new HashSet<>();
-  private final LinkedList<Integer> diffBetweenBoards = new LinkedList<>();
+  private final LinkedList<Integer> traceLengthDifferenceBetweenPasses = new LinkedList<>();
   private boolean is_interrupted = false;
   /** Used to draw the airline of the current routed incomplete. */
   private FloatLine air_line;
@@ -127,12 +128,11 @@ public class BatchAutorouter {
    * Returns true if the board is completed.
    */
   public boolean autoroute_passes(boolean save_intermediate_stages) {
-    ResourceBundle resources =
-        ResourceBundle.getBundle(
-            "app.freerouting.interactive.InteractiveState", hdlg.get_locale());
+    TextManager tm = new TextManager(InteractiveState.class, hdlg.get_locale());
+
     boolean still_unrouted_items = true;
-    int diffBetweenBoardsCheckSizeDefault = 20;
-    int diffBetweenBoardsCheckSize = diffBetweenBoardsCheckSizeDefault;
+    int minimumPassCountBeforeImprovementCheck = 5;
+    int numberOfPassesToAverage = minimumPassCountBeforeImprovementCheck;
 
     while (still_unrouted_items && !this.is_interrupted) {
       if (thread.is_stop_auto_router_requested()) {
@@ -152,13 +152,7 @@ public class BatchAutorouter {
         break;
       }
 
-      String start_message =
-          resources.getString("batch_autorouter")
-              + " "
-              + resources.getString("stop_message")
-              + "        "
-              + resources.getString("autorouter_pass")
-              + curr_pass_no;
+      String start_message = tm.getText("autorouter_started", Integer.toString(curr_pass_no));
       hdlg.screen_messages.set_status_message(start_message);
 
       BasicBoard boardBefore = this.routing_board.clone();
@@ -172,31 +166,29 @@ public class BatchAutorouter {
       already_checked_board_hashes.add(this.routing_board.get_hash());
       still_unrouted_items = autoroute_pass(curr_pass_no, true);
 
-      // let's check if there was enough change in the last pass, because if it was too little we should probably stop
-      int newTraceDifferences = this.routing_board.diff_traces(boardBefore);
-      diffBetweenBoards.add(newTraceDifferences);
+      // let's check if there was enough track length change in the last few passes, because if it was too little we should stop
+      // TODO: score the board based on the costs settings of trace length, corner and via count, unconnected ratsnets, etc.
+      int traceLengthDifferences = this.routing_board.diff_traces(boardBefore);
+      traceLengthDifferenceBetweenPasses.add(traceLengthDifferences);
 
-      if (diffBetweenBoards.size() > diffBetweenBoardsCheckSize) {
-        diffBetweenBoards.removeFirst();
+      if (traceLengthDifferenceBetweenPasses.size() > numberOfPassesToAverage) {
+        traceLengthDifferenceBetweenPasses.removeFirst();
 
-        OptionalDouble average = diffBetweenBoards.stream().mapToDouble(a -> a).average();
+        OptionalDouble averageTraceLengthDifferencePerPass = traceLengthDifferenceBetweenPasses.stream().mapToDouble(a -> a).average();
 
-        if (average.getAsDouble() < 20.0) {
+        // TODO: make the threshold based on the initial score (cost)
+        if (averageTraceLengthDifferencePerPass.getAsDouble() < 20.0)
+        {
           FRLogger.warn(
               "There were only "
-                  + FRLogger.defaultFloatFormat.format(average.getAsDouble())
-                  + " changes in the last "
-                  + diffBetweenBoardsCheckSize
-                  + " passes, so it's very likely that autorouter can't improve the result much further. It is recommended to stop it and finish the board manually.");
-          diffBetweenBoardsCheckSize += diffBetweenBoardsCheckSizeDefault;
-
-          if (diffBetweenBoardsCheckSize > 200) {
-            FRLogger.warn(
-                "There was so little change during the recent passes that autorouter will be stopped now.");
-            this.is_interrupted = true;
-          }
-        } else {
-          diffBetweenBoardsCheckSize = diffBetweenBoardsCheckSizeDefault;
+                  + FRLogger.defaultFloatFormat.format(averageTraceLengthDifferencePerPass.getAsDouble())
+                  + " track length increase in the last "
+                  + numberOfPassesToAverage
+                  + " passes, so it's very likely that autorouter can't improve the result further.");
+          this.is_interrupted = true;
+        } else
+        {
+          numberOfPassesToAverage = minimumPassCountBeforeImprovementCheck;
         }
       }
       FRLogger.traceExit(
@@ -205,7 +197,7 @@ public class BatchAutorouter {
               + " on board '"
               + current_board_hash
               + "' making {} changes",
-          newTraceDifferences);
+          traceLengthDifferences);
 
       if (save_intermediate_stages) {
         this.thread.hdlg.get_panel().board_frame.save_intermediate_stage_file();
