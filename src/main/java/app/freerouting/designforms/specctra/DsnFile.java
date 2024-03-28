@@ -61,8 +61,7 @@ public class DsnFile {
       }
     }
     ReadScopeParameter read_scope_par =
-        new ReadScopeParameter(
-            scanner, p_board_handling, p_observers, p_item_id_no_generator, p_test_level);
+        new ReadScopeParameter(scanner, p_board_handling, p_observers, p_item_id_no_generator, p_test_level);
     boolean read_ok = Keyword.PCB_SCOPE.read_scope(read_scope_par);
     ReadResult result;
     if (read_ok) {
@@ -195,19 +194,18 @@ public class DsnFile {
       OutputStream p_file,
       String p_design_name,
       boolean p_compat_mode) {
-    // app.freerouting.tests.Validate.check("before writing dsn", p_board);
     IndentFileWriter output_file = new IndentFileWriter(p_file);
 
     try {
       write_pcb_scope(p_board_handling, output_file, p_design_name, p_compat_mode);
     } catch (IOException e) {
-      FRLogger.error("unable to write dsn file", e);
+      FRLogger.error("unable to write Specctra DSN file", e);
       return false;
     }
     try {
       output_file.close();
     } catch (IOException e) {
-      FRLogger.error("unable to close dsn file", e);
+      FRLogger.error("unable to close Specctra DSN file", e);
       return false;
     }
     return true;

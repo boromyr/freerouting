@@ -1,7 +1,10 @@
 package app.freerouting.gui;
 
 import app.freerouting.management.TextManager;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.function.Consumer;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.Cursor;
@@ -21,15 +24,13 @@ public class SegmentedButtons extends JPanel {
   private Color borderColor = new Color(121, 116, 126); // Border color around the buttons
   private int borderWidth = 1; // Border width around the buttons
 
-  public interface ValueChangeListener {
-    void valueChanged(String newValue);
-  }
-
-  private ValueChangeListener valueChangeListener;
+  private List<Consumer<String>> valueChangedEventListeners = new ArrayList<>();
 
   public SegmentedButtons(TextManager tm, String heading, String... values) {
     setLayout(new BorderLayout());
-    //setBorder(BorderFactory.createEmptyBorder()); // No outer border
+
+    // Set an empty border as a margin around the component
+    setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
 
     // Put the heading above the buttons, centered horizontally
     JLabel headingLabel = new JLabel(heading, SwingConstants.CENTER); // Center the text in the label
@@ -86,10 +87,7 @@ public class SegmentedButtons extends JPanel {
       // Set the selected button
       if (isFirst)
       {
-        button.setSelected(true);
-        button.setForeground(selectedTextColor);
-        button.setBackground(selectedColor);
-        button.setOpaque(true);
+        this.setSelectedValue(buttonValues.get(button));
       }
 
       buttonIndex++;
@@ -170,19 +168,32 @@ public class SegmentedButtons extends JPanel {
           button.setBackground(selectedColor);
           button.setOpaque(true);
 
-          if (valueChangeListener != null) {
-            valueChangeListener.valueChanged(selectedValue);
-          }
+          this.valueChangedEventListeners.forEach(listener -> listener.accept(selectedValue));
         });
 
     return button;
   }
 
-  public void setValueChangeListener(ValueChangeListener listener) {
-    this.valueChangeListener = listener;
+  @Override
+  public void setEnabled(boolean enabled) {
+    super.setEnabled(enabled);
+    for (JToggleButton button : buttonValues.keySet()) {
+      button.setEnabled(enabled);
+    }
+  }
+
+  public void addValueChangedEventListener(Consumer<String> listener) {
+    valueChangedEventListeners.add(listener);
   }
 
   public String getSelectedValue() {
     return selectedValue;
+  }
+
+  public void setSelectedValue(String value) {
+    for (Map.Entry<JToggleButton, String> entry : buttonValues.entrySet()) {
+      JToggleButton button = entry.getKey();
+      button.setSelected(entry.getValue().equals(value));
+    }
   }
 }

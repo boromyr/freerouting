@@ -27,6 +27,7 @@ import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.PolylineShape;
 import app.freerouting.gui.BoardPanel;
 import app.freerouting.gui.ComboBoxLayer;
+import app.freerouting.gui.DesignFile;
 import app.freerouting.gui.MainApplication;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.logger.LogEntries;
@@ -41,17 +42,22 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.geom.Point2D;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 import javax.swing.JPopupMenu;
 
 /** Central connection class between the graphical user interface and the board database. */
@@ -87,13 +93,18 @@ public class BoardHandling extends BoardHandlingHeadless {
    * True if currently a logfile is being processed. Used to prevent interactive changes of the
    * board database in this case.
    */
-  @Deprecated(since = "2.0", forRemoval = true)
   private boolean board_is_read_only = false;
   /** The current position of the mouse pointer. */
   private FloatPoint current_mouse_position;
 
+  // The time of the last repaint of the board panel
   private static long last_repainted_time = 0;
+  // The interval in milliseconds between two repaints of the board panel
   private static long repaint_interval = 1000;
+  // The board checksum is used to detect changes in the board database
+  private long originalBoardChecksum = 0;
+
+  private List<Consumer<Boolean>> readOnlyEventListeners = new ArrayList<>();
 
   /** Creates a new BoardHandling */
   public BoardHandling(
@@ -104,7 +115,7 @@ public class BoardHandling extends BoardHandlingHeadless {
     super(p_locale, p_save_intermediate_stages, p_optimization_improvement_threshold);
     this.panel = p_panel;
     this.screen_messages = p_panel.screen_messages;
-    this.set_interactive_state(SelectMenuState.get_instance(this, activityReplayFile));
+    this.set_interactive_state(RouteMenuState.get_instance(this, activityReplayFile));
     this.resources =
         ResourceBundle.getBundle("app.freerouting.interactive.BoardHandling", p_locale);
 
@@ -131,6 +142,9 @@ public class BoardHandling extends BoardHandlingHeadless {
   public void set_board_read_only(boolean p_value) {
     this.board_is_read_only = p_value;
     this.settings.set_read_only(p_value);
+
+    // Raise an event to notify the observers that the board read only property changed
+    this.readOnlyEventListeners.forEach(listener -> listener.accept(p_value));
   }
 
   /** Return the current language for the GUI messages. */
@@ -648,10 +662,8 @@ public class BoardHandling extends BoardHandlingHeadless {
   /** Actions to be taken in the current interactive state when the left mouse button is clicked. */
   public void left_button_clicked(Point2D p_point) {
     if (board_is_read_only) {
-      if (this.interactive_action_thread != null) {
-        // The left button is used to stop the interactive action thread.
-        this.interactive_action_thread.request_stop();
-      }
+      // We are currently busy working on the board and the user clicked on the canvas with the left mouse button.
+      this.stop_autorouter_and_route_optimizer();
       return;
     }
     if (interactive_state != null && graphics_context != null) {
@@ -735,7 +747,7 @@ public class BoardHandling extends BoardHandlingHeadless {
     InteractiveState return_state = interactive_state.key_typed(p_key_char);
     if (return_state != null && return_state != interactive_state) {
       set_interactive_state(return_state);
-      panel.board_frame.hilight_selected_button();
+      panel.board_frame.setToolbarModeSelectionPanelValue(get_interactive_state());
       repaint();
     }
   }
@@ -802,6 +814,25 @@ public class BoardHandling extends BoardHandlingHeadless {
     screen_messages.set_status_message(resources.getString("drag_menu"));
   }
 
+  public long calculateCrc32(InputStream inputStream) {
+    return DesignFile.CalculateCrc32(inputStream).getValue();
+  }
+
+  public long calculateCrc32() {
+    // Create a memory stream
+    ByteArrayOutputStream memoryStream = new ByteArrayOutputStream();
+    DsnFile.write(this, memoryStream, "N/A", false);
+
+    // Transform the output stream to an input stream
+    InputStream inputStream = new ByteArrayInputStream(memoryStream.toByteArray());
+
+    return calculateCrc32(inputStream);
+  }
+
+  public boolean isBoardChanged() {
+    return calculateCrc32() != originalBoardChecksum;
+  }
+
   /**
    * Reads an existing board design from the input stream. Returns false, if the input stream does
    * not contain a legal board design.
@@ -813,6 +844,7 @@ public class BoardHandling extends BoardHandlingHeadless {
       settings.set_logfile(this.activityReplayFile);
       coordinate_transform = (CoordinateTransform) p_design.readObject();
       graphics_context = (GraphicsContext) p_design.readObject();
+      originalBoardChecksum = calculateCrc32();
     } catch (Exception e) {
       FRLogger.error("Couldn't read design file", e);
       return false;
@@ -846,6 +878,7 @@ public class BoardHandling extends BoardHandlingHeadless {
     if (read_result == DsnFile.ReadResult.OK) {
       FRAnalytics.fileLoaded("DSN", this.board.communication.specctra_parser_info.host_cad + "," + this.board.communication.specctra_parser_info.host_version);
       this.board.reduce_nets_of_route_items();
+      originalBoardChecksum = calculateCrc32();
       FRAnalytics.boardLoaded(
           this.board.communication.specctra_parser_info.host_cad,
           this.board.communication.specctra_parser_info.host_version,
@@ -865,7 +898,7 @@ public class BoardHandling extends BoardHandlingHeadless {
   }
 
   /**
-   * Writes the currently edited board design to a text file in the Specctra dsn format. If
+   * Writes the currently edited board design to a text file in the Specctra DSN format. If
    * p_compat_mode is true, only standard specctra dsn scopes are written, so that any host system
    * with a specctra interface can read them.
    */
@@ -874,7 +907,14 @@ public class BoardHandling extends BoardHandlingHeadless {
     if (board_is_read_only || p_output_stream == null) {
       return false;
     }
-    return DsnFile.write(this, p_output_stream, p_design_name, p_compat_mode);
+
+    boolean wasSaveSuccessful = DsnFile.write(this, p_output_stream, p_design_name, p_compat_mode);
+
+    if (wasSaveSuccessful) {
+      originalBoardChecksum = calculateCrc32();
+    }
+
+    return wasSaveSuccessful;
   }
 
   /** Writes a .SES session file in the Specctra ses-format. */
@@ -882,7 +922,13 @@ public class BoardHandling extends BoardHandlingHeadless {
     if (board_is_read_only) {
       return false;
     }
-    return SpecctraSesFileWriter.write(this.get_routing_board(), p_output_stream, p_design_name);
+    boolean wasSaveSuccessful =  SpecctraSesFileWriter.write(this.get_routing_board(), p_output_stream, p_design_name);
+
+    if (wasSaveSuccessful) {
+      originalBoardChecksum = calculateCrc32();
+    }
+
+    return wasSaveSuccessful;
   }
 
   /** Writes a session file in the Eagle SCR format. */
@@ -902,6 +948,8 @@ public class BoardHandling extends BoardHandlingHeadless {
       p_object_stream.writeObject(settings);
       p_object_stream.writeObject(coordinate_transform);
       p_object_stream.writeObject(graphics_context);
+
+      originalBoardChecksum = calculateCrc32();
     } catch (Exception e) {
       screen_messages.set_status_message(resources.getString("save_error"));
       result = false;
@@ -930,8 +978,7 @@ public class BoardHandling extends BoardHandlingHeadless {
       return;
     }
     FloatPoint location = graphics_context.coordinate_transform.screen_to_board(p_point);
-    InteractiveState new_state =
-        RouteState.get_instance(location, this.interactive_state, this, activityReplayFile);
+    InteractiveState new_state = RouteState.get_instance(location, this.interactive_state, this, activityReplayFile);
     set_interactive_state(new_state);
   }
 
@@ -1146,7 +1193,7 @@ public class BoardHandling extends BoardHandlingHeadless {
     this.interactive_action_thread.start();
   }
 
-  /** Start the batch autorouter on the whole Board */
+  /** Start the auto-router and route optimizer on the whole board */
   public InteractiveActionThread start_autorouter_and_route_optimizer() {
     if (board_is_read_only) {
       return null;
@@ -1157,6 +1204,16 @@ public class BoardHandling extends BoardHandlingHeadless {
     this.interactive_action_thread.start();
 
     return this.interactive_action_thread;
+  }
+
+  /** Stops the auto-router and route optimizer */
+  public void stop_autorouter_and_route_optimizer() {
+    if (this.interactive_action_thread != null) {
+      // The left button is used to stop the interactive action thread.
+      this.interactive_action_thread.request_stop();
+    }
+
+    this.set_board_read_only(false);
   }
 
   /** Selects also all items belonging to a net of a currently selected item. */
@@ -1322,7 +1379,7 @@ public class BoardHandling extends BoardHandlingHeadless {
     }
   }
 
-  /** Gets the current interactive state. */
+  /** Gets the current interactive mode: select, route or drag. */
   public InteractiveState get_interactive_state() {
     return this.interactive_state;
   }
@@ -1332,7 +1389,6 @@ public class BoardHandling extends BoardHandlingHeadless {
       this.interactive_state = p_state;
       if (!this.board_is_read_only) {
         p_state.set_toolbar();
-        this.panel.board_frame.set_context_sensitive_help(this.panel, p_state.get_help_id());
       }
     }
   }
@@ -1406,4 +1462,9 @@ public class BoardHandling extends BoardHandlingHeadless {
   public void set_num_threads(int p_value) {
     num_threads = p_value;
   }
+
+  public void addReadOnlyEventListener(Consumer<Boolean> listener) {
+    readOnlyEventListeners.add(listener);
+  }
+
 }
