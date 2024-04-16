@@ -4,7 +4,6 @@ import app.freerouting.board.Item;
 import app.freerouting.board.ItemSelectionFilter;
 import app.freerouting.board.LayerStructure;
 import app.freerouting.board.Pin;
-import app.freerouting.board.TestLevel;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.logger.FRLogger;
 
@@ -37,7 +36,7 @@ public class MenuState extends InteractiveState {
     InteractiveState result;
     if (something_found) {
       result = SelectedItemState.get_instance(picked_items, this, hdlg, this.activityReplayFile);
-      hdlg.screen_messages.set_status_message(resources.getString("in_select_mode"));
+      hdlg.screen_messages.set_status_message(tm.getText("in_select_mode"));
       if (activityReplayFile != null) {
         activityReplayFile.start_scope(ActivityReplayFileScope.START_SELECT, p_location);
       }
@@ -62,7 +61,7 @@ public class MenuState extends InteractiveState {
       Pin selected_pin = (Pin) first_item;
       result = PinSwapState.get_instance(selected_pin, this, hdlg, this.activityReplayFile);
     } else {
-      hdlg.screen_messages.set_status_message(resources.getString("no_pin_selected"));
+      hdlg.screen_messages.set_status_message(tm.getText("no_pin_selected"));
     }
     hdlg.repaint();
     return result;

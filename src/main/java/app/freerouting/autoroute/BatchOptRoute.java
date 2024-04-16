@@ -8,8 +8,10 @@ import app.freerouting.board.Via;
 import app.freerouting.datastructures.UndoableObjects;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.interactive.InteractiveActionThread;
+import app.freerouting.interactive.InteractiveState;
 import app.freerouting.interactive.RatsNest;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.management.TextManager;
 import app.freerouting.rules.BoardRules;
 
 import java.util.Collection;
@@ -70,7 +72,7 @@ public class BatchOptRoute {
       if (curr_item instanceof Trace) {
         Trace curr_trace = (Trace) curr_item;
         FixedState fixed_state = curr_trace.get_fixed_state();
-        if (fixed_state == FixedState.UNFIXED || fixed_state == FixedState.SHOVE_FIXED) {
+        if (fixed_state == FixedState.NOT_FIXED || fixed_state == FixedState.SHOVE_FIXED) {
           double weighted_trace_length =
               curr_trace.get_length()
                   * (curr_trace.get_half_width()
@@ -190,15 +192,15 @@ public class BatchOptRoute {
   /** Try to improve the route by re-routing the connections containing p_item. */
   protected ItemRouteResult opt_route_item(
       Item p_item, int p_pass_no, boolean p_with_preferred_directions) {
-    ResourceBundle resources =
-        ResourceBundle.getBundle(
-            "app.freerouting.interactive.InteractiveState", this.thread.hdlg.get_locale());
+
+    TextManager tm = new TextManager(InteractiveState.class, this.thread.hdlg.get_locale());
+
     String start_message =
-        resources.getString("batch_optimizer")
+        tm.getText("batch_optimizer")
             + " "
-            + resources.getString("stop_message")
+            + tm.getText("stop_message")
             + "        "
-            + resources.getString("routeoptimizer_pass")
+            + tm.getText("routeoptimizer_pass")
             + p_pass_no;
     this.thread.hdlg.screen_messages.set_status_message(
         start_message); // assume overwriting messages is harmless
@@ -237,7 +239,7 @@ public class BatchOptRoute {
     }
     // no need to undo for cloned board which is either promoted to master or discarded
 
-    this.routing_board.remove_items(ripped_connections, false);
+    this.routing_board.remove_items(ripped_connections);
     for (int i = 0; i < p_item.net_count(); ++i) {
       this.routing_board.combine_traces(p_item.get_net_no(i));
     }

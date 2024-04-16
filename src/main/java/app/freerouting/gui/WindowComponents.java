@@ -5,6 +5,7 @@ import app.freerouting.board.Components;
 import app.freerouting.board.Item;
 import app.freerouting.board.RoutingBoard;
 
+import app.freerouting.management.TextManager;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -18,18 +19,16 @@ public class WindowComponents extends WindowObjectListWithFilter {
   /** Creates a new instance of ComponentsWindow */
   public WindowComponents(BoardFrame p_board_frame) {
     super(p_board_frame);
-    ResourceBundle resources =
-        ResourceBundle.getBundle(
-            "app.freerouting.gui.Default", p_board_frame.get_locale());
-    this.setTitle(resources.getString("components"));
+    setLanguage(p_board_frame.get_locale());
+
+    this.setTitle(tm.getText("components"));
     p_board_frame.set_context_sensitive_help(this, "WindowObjectList_BoardComponents");
   }
 
   /** Fills the list with the board components. */
   @Override
   protected void fill_list() {
-    Components components =
-        this.board_frame.board_panel.board_handling.get_routing_board().components;
+    Components components = this.board_frame.board_panel.board_handling.get_routing_board().components;
     Component[] sorted_arr = new Component[components.count()];
     for (int i = 0; i < sorted_arr.length; ++i) {
       sorted_arr[i] = components.get(i + 1);

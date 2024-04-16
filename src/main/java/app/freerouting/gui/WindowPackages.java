@@ -6,6 +6,7 @@ import app.freerouting.board.RoutingBoard;
 import app.freerouting.library.Package;
 import app.freerouting.library.Packages;
 
+import app.freerouting.management.TextManager;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -19,10 +20,9 @@ public class WindowPackages extends WindowObjectListWithFilter {
   /** Creates a new instance of PackagesWindow */
   public WindowPackages(BoardFrame p_board_frame) {
     super(p_board_frame);
-    ResourceBundle resources =
-        ResourceBundle.getBundle(
-            "app.freerouting.gui.Default", p_board_frame.get_locale());
-    this.setTitle(resources.getString("packages"));
+    setLanguage(p_board_frame.get_locale());
+
+    this.setTitle(tm.getText("packages"));
     p_board_frame.set_context_sensitive_help(this, "WindowObjectList_LibraryPackages");
   }
 
