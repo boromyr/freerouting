@@ -121,6 +121,12 @@ public class MainApplication extends WindowBase
     pack();
     setSize(window_width, window_height);
     setResizable(false);
+    // ^ ================================================================== NEW
+    Dimension dimension = Toolkit.getDefaultToolkit().getScreenSize();
+    int x = (int) ((dimension.getWidth() - this.getWidth()) / 2);
+    int y = (int) ((dimension.getHeight() - this.getHeight()) / 2);
+    this.setLocation(x-12, y-12);
+    // ^ ================================================================== END
   }
 
   /**
